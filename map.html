@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Simple Map with Street View</title>
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js'></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: row;
+            height: 100%;
+        }
+
+        #map {
+            height: 100%;
+            width: 50%;
+        }
+
+        #streetview {
+            height: 100%;
+            width: 50%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="map"></div>
+        <div id="streetview"></div>
+    </div>
+
+    <script>
+        let panorama;
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://api.maptiler.com/maps/streets/style.json?key=YbCPLULzWdf1NplssEIc',
+            center: [-6.269649, 53.350379],
+            zoom: 17
+        });
+
+        map.on('load', () => {
+            // Add source for the circles
+            map.addSource('circles', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: []
+                }
+            });
+
+            // Add layer for the circles
+            map.addLayer({
+                id: 'circles',
+                type: 'circle',
+                source: 'circles',
+                paint: {
+                    'circle-radius': 12,
+                    'circle-color': 'red',
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': 'white'
+                }
+            });
+
+            // Load CSV data using d3.csv
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSTPqE_AH0J2pawMVjC7eJnkd7L6RhXlTSJ75EPSQyyrlH4lW3SsEGKtMDiiAzFAH3nEFZ-LfqG3lm3/pub?output=csv")
+                .then(data => {
+                    console.log('CSV data loaded:', data);
+
+                    const features = data.map(d => {
+                        const coordinates = d['coordinates'].split(',').map(Number);
+                        const [lat, lng] = coordinates;
+
+                        return {
+                            type: 'Feature',
+                            geometry: {
+                                type: 'Point',
+                                coordinates: [lng, lat]
+                            },
+                            properties: d
+                        }
+                    });
+
+                    const geojson = {
+                        type: 'FeatureCollection',
+                        features: features
+                    };
+
+                    map.getSource('circles').setData(geojson);
+                })
+                .catch(error => {
+                    console.error('Error loading CSV data:', error);
+                });
+
+            // Add click event listener for the circles
+            map.on('click', 'circles', function (e) {
+                const feature = e.features && e.features[0];
+                if (!feature) return;
+
+                const coordinates = feature.geometry.coordinates;
+                const lat = coordinates[1];
+                const lng = coordinates[0];
+
+                console.log('Pin clicked at:', lat, lng);
+
+                // Update Street View position
+                if (panorama) {
+                    panorama.setPosition({ lat: lat, lng: lng });
+                    panorama.setPov({
+                        heading: 0,
+                        pitch: 0
+                    });
+                }
+            });
+
+            // Change cursor to pointer when hovering over circles
+            map.on('mouseenter', 'circles', () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', 'circles', () => {
+                map.getCanvas().style.cursor = '';
+            });
+        });
+
+        // Initialize Google Street View
+        async function initMap() {
+            const { StreetViewPanorama } = await google.maps.importLibrary("streetView");
+            const defaultCoordinates = { lat: 53.350379, lng: -6.269649 };
+
+            panorama = new StreetViewPanorama(
+                document.getElementById('streetview'),
+                {
+                    position: defaultCoordinates,
+                    pov: { heading: 0, pitch: 0 },
+                    zoom: 0,
+                }
+            );
+        }
+
+        // Wait for Google Maps to load, then initialize Street View
+        setTimeout(() => {
+            initMap();
+        }, 1000);
+    </script>
+
+    <!-- Initialize Google Maps -->
+    <script>
+        (g => {
+            var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window;
+            b = b[c] || (b[c] = {});
+            var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => {
+                await (a = m.createElement("script"));
+                e.set("libraries", [...r] + "");
+                for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
+                e.set("callback", c + ".maps." + q);
+                a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+                d[q] = f;
+                a.onerror = () => h = n(Error(p + " could not load."));
+                a.nonce = m.querySelector("script[nonce]")?.nonce || "";
+                m.head.append(a)
+            }));
+            d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n))
+        })({
+            key: "AIzaSyALU--rsdhd4lwvHyolP0x1tg4Dqcj-PI8",
+            v: "3.53",
+        });
+    </script>
+</body>
+
+</html>
