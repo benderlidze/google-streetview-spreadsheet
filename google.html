@@ -25,6 +25,108 @@
             width: 100%;
         }
 
+        /* Filter panel styles */
+        #filters {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            padding: 15px;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+            max-height: 400px;
+            overflow-y: auto;
+            min-width: 200px;
+        }
+
+        .filter-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #4285f4;
+        }
+
+        .toggle-container-small {
+            margin: 6px 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .toggle-label-small {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        .toggle-label-small:hover {
+            background-color: #f8f8f8;
+        }
+
+        .toggle-name-small {
+            font-size: 13px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .toggle-switch-small {
+            position: relative;
+            width: 32px;
+            height: 18px;
+            margin-right: 8px;
+        }
+
+        .toggle-input-small {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .toggle-slider-small {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.2s;
+            border-radius: 18px;
+        }
+
+        .toggle-slider-small:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: 0.2s;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-input-small:checked+.toggle-slider-small {
+            background-color: #4285f4;
+        }
+
+        .toggle-input-small:checked+.toggle-slider-small:before {
+            transform: translateX(14px);
+        }
+
+        .toggle-input-small:focus+.toggle-slider-small {
+            box-shadow: 0 0 1px #4285f4;
+        }
+
         /* Custom popup modal styles - smaller size */
         #streetview-popup {
             position: fixed;
@@ -34,7 +136,7 @@
             height: 100%;
             background: rgba(0, 0, 0, 0.8);
             display: none;
-            z-index: 1000;
+            z-index: 2000;
             backdrop-filter: blur(5px);
         }
 
@@ -104,7 +206,7 @@
         /* Info section below street view */
         #info-section {
             background: #f8f9fa;
-            padding: 15px 20px;
+            padding: 10px;
             border-top: 1px solid #e9ecef;
             flex-shrink: 0;
         }
@@ -135,6 +237,7 @@
 
         .button-container {
             display: flex;
+            flex-direction: row;
             gap: 10px;
             margin-top: 15px;
             padding-top: 15px;
@@ -206,19 +309,19 @@
                 max-height: none;
             }
 
-            .button-container {
-                flex-direction: column;
-            }
-
             .action-button {
                 width: 100%;
             }
+
         }
     </style>
 </head>
 
 <body>
     <div id="map"></div>
+    <div id="filters">
+        <div class="filter-title">Filter by Group</div>
+    </div>
 
     <!-- Custom Street View Popup Modal -->
     <div id="streetview-popup">
@@ -255,9 +358,18 @@
         let map;
         let popupPanorama;
         let markers = [];
-        let clusterer = null; // Renamed to avoid conflicts
+        let clusterer = null;
         let streetViewService;
         let currentPopupData = null;
+
+        // Filter system
+        const filters = document.getElementById('filters');
+        const appData = {
+            allMarkers: [],
+            availableGroups: [],
+            groupStates: {},
+            csvData: []
+        };
 
         // Load MarkerClusterer dynamically to avoid conflicts
         function loadMarkerClusterer() {
@@ -336,77 +448,163 @@
             d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSTPqE_AH0J2pawMVjC7eJnkd7L6RhXlTSJ75EPSQyyrlH4lW3SsEGKtMDiiAzFAH3nEFZ-LfqG3lm3/pub?output=csv")
                 .then(data => {
                     console.log('CSV data loaded:', data);
+                    appData.csvData = data;
 
-                    // Clear existing markers and clusterer
-                    if (clusterer) {
-                        clusterer.clearMarkers();
-                    }
-                    markers = [];
+                    // Extract unique groups from column 'group' (assuming this is the filter column)
+                    const groupColumn = 'group'; // Change this to your actual column name
+                    appData.availableGroups = [...new Set(data.map(d => d[groupColumn]).filter(g => g && g.trim() !== ''))];
+                    console.log('Available groups:', appData.availableGroups);
 
-                    // Create markers for each data point
-                    data.forEach(d => {
-                        const coordinates = d['coordinates'].split(',').map(Number);
-                        const [lat, lng] = coordinates;
-
-                        // Create marker
-                        const marker = new google.maps.Marker({
-                            position: { lat: lat, lng: lng },
-                            title: d.name || 'Location',
-                            icon: {
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 12,
-                                fillColor: '#4285f4',
-                                fillOpacity: 1,
-                                strokeWeight: 2,
-                                strokeColor: 'white'
-                            }
-                        });
-
-                        // Store data in marker for access in click handler
-                        marker.csvData = d;
-
-                        // Add click listener to marker to show popup
-                        marker.addListener('click', () => {
-                            console.log('Marker clicked at:', lat, lng);
-                            showStreetViewPopup(lat, lng, d);
-                        });
-
-                        // Store marker reference
-                        markers.push(marker);
-
-                        // Create info window for hover
-                        const infoWindow = new google.maps.InfoWindow({
-                            content: createInfoWindowContent(d)
-                        });
-
-                        // Add info window on marker hover
-                        marker.addListener('mouseover', () => {
-                            infoWindow.open(map, marker);
-                        });
-
-                        marker.addListener('mouseout', () => {
-                            infoWindow.close();
-                        });
+                    // Initialize group states - all set to true by default
+                    appData.availableGroups.forEach(group => {
+                        appData.groupStates[group] = true;
                     });
 
-                    // Initialize MarkerClusterer with all markers
-                    if (markers.length > 0 && window.markerClusterer) {
-                        clusterer = new markerClusterer.MarkerClusterer({
-                            map: map,
-                            markers: markers,
-                            algorithm: new markerClusterer.GridAlgorithm({
-                                gridSize: 100,
-                                maxZoom: 18 // Stop clustering at zoom level 15 and above
-                            })
-                        });
+                    // Create toggle switches for each unique group
+                    appData.availableGroups.forEach(group => {
+                        const toggle = createToggleDiv(group, handleToggle, true);
+                        filters.appendChild(toggle);
+                    });
 
-                        console.log(`Created ${markers.length} markers with clustering`);
-                    }
+                    // Create all markers
+                    createAllMarkers(data);
+
+                    // Initial map update with all markers visible
+                    updateMapMarkers();
                 })
                 .catch(error => {
                     console.error('Error loading CSV data:', error);
                 });
         }
+
+        function createAllMarkers(data) {
+            // Clear existing markers
+            appData.allMarkers = [];
+
+            // Create markers for each data point
+            data.forEach(d => {
+                const coordinates = d['coordinates'].split(',').map(Number);
+                const [lat, lng] = coordinates;
+
+                // Create marker
+                const marker = new google.maps.Marker({
+                    position: { lat: lat, lng: lng },
+                    title: d.name || 'Location',
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 12,
+                        fillColor: '#4285f4',
+                        fillOpacity: 1,
+                        strokeWeight: 2,
+                        strokeColor: 'white'
+                    }
+                });
+
+                // Store data in marker for access in click handler
+                marker.csvData = d;
+                marker.groupValue = d['group'] || '';
+
+                // Add click listener to marker to show popup
+                marker.addListener('click', () => {
+                    console.log('Marker clicked at:', lat, lng);
+                    showStreetViewPopup(lat, lng, d);
+                });
+
+                // Create info window for hover
+                const infoWindow = new google.maps.InfoWindow({
+                    content: createInfoWindowContent(d)
+                });
+
+                // Add info window on marker hover
+                marker.addListener('mouseover', () => {
+                    infoWindow.open(map, marker);
+                });
+
+                marker.addListener('mouseout', () => {
+                    infoWindow.close();
+                });
+
+                // Store marker reference
+                appData.allMarkers.push(marker);
+            });
+
+            console.log(`Created ${appData.allMarkers.length} total markers`);
+        }
+
+        // Function to filter markers based on group states
+        function updateMapMarkers() {
+            // Filter markers based on active groups
+            const filteredMarkers = appData.allMarkers.filter(marker =>
+                appData.groupStates[marker.groupValue] === true
+            );
+
+            // Clear existing clusterer
+            if (clusterer) {
+                clusterer.clearMarkers();
+            }
+
+            // Create new clusterer with filtered markers
+            if (filteredMarkers.length > 0 && window.markerClusterer) {
+                clusterer = new markerClusterer.MarkerClusterer({
+                    map: map,
+                    markers: filteredMarkers,
+                    algorithm: new markerClusterer.GridAlgorithm({
+                        gridSize: 100,
+                        maxZoom: 18
+                    })
+                });
+
+                console.log(`Displaying ${filteredMarkers.length} filtered markers`);
+            }
+        }
+
+        // Create toggle switch element
+        function createToggleDiv(name, onToggle, initialState = false) {
+            const container = document.createElement('div');
+            container.className = 'toggle-container-small';
+
+            const label = document.createElement('label');
+            label.className = 'toggle-label-small';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'toggle-name-small';
+            nameSpan.textContent = name;
+
+            const switchDiv = document.createElement('div');
+            switchDiv.className = 'toggle-switch-small';
+
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.checked = initialState;
+            input.className = 'toggle-input-small';
+
+            const slider = document.createElement('span');
+            slider.className = 'toggle-slider-small';
+
+            input.addEventListener('change', function () {
+                if (onToggle) {
+                    onToggle(this.checked, name);
+                }
+            });
+
+            switchDiv.appendChild(input);
+            switchDiv.appendChild(slider);
+            label.appendChild(switchDiv);
+            label.appendChild(nameSpan);
+            container.appendChild(label);
+
+            return container;
+        }
+
+        // Handle toggle changes and update group states
+        const handleToggle = (state, name) => {
+            appData.groupStates[name] = state;
+            console.log(`${name} is now ${state ? 'ON' : 'OFF'}`);
+            console.log('Updated group states:', appData.groupStates);
+
+            // Update the map with new filter
+            updateMapMarkers();
+        };
 
         function showStreetViewPopup(lat, lng, data) {
             currentPopupData = data;
@@ -469,10 +667,6 @@
         }
 
         function updateInfoFields(data) {
-            // Log all available fields to help debug
-            console.log('Available CSV fields:', Object.keys(data));
-            console.log('CSV data:', data);
-
             // Update Ref field
             const refValue = data['Ref'] || '-';
             document.getElementById('ref-value').textContent = refValue;
@@ -493,12 +687,10 @@
                 picturesButton.href = picturesUrl;
                 picturesButton.classList.remove('disabled');
                 picturesButton.style.pointerEvents = 'auto';
-                console.log('Pictures URL set to:', picturesUrl);
             } else {
                 picturesButton.href = '#';
                 picturesButton.classList.add('disabled');
                 picturesButton.style.pointerEvents = 'none';
-                console.log('Pictures URL not available or empty');
             }
 
             // Update Feedback button URL
@@ -509,12 +701,10 @@
                 feedbackButton.href = feedbackUrl;
                 feedbackButton.classList.remove('disabled');
                 feedbackButton.style.pointerEvents = 'auto';
-                console.log('Feedback URL set to:', feedbackUrl);
             } else {
                 feedbackButton.href = '#';
                 feedbackButton.classList.add('disabled');
                 feedbackButton.style.pointerEvents = 'none';
-                console.log('Feedback URL not available or empty');
             }
         }
 
@@ -544,35 +734,7 @@
             return content;
         }
 
-        // Add map click listener to show street view popup for any location
-        function addMapClickListener() {
-            map.addListener('click', (event) => {
-                const lat = event.latLng.lat();
-                const lng = event.latLng.lng();
-
-                // Create temporary data object for clicked location
-                const clickData = {
-                    name: 'Map Location',
-                    coordinates: `${lat},${lng}`,
-                    Ref: 'N/A',
-                    group: 'Manual Selection',
-                    Text: 'Selected from map'
-                };
-
-                showStreetViewPopup(lat, lng, clickData);
-            });
-        }
-
         window.initMap = initMap;
-
-        // Add map click listener after initialization
-        // google.maps.event.addDomListener(window, 'load', () => {
-        //     setTimeout(() => {
-        //         if (map) {
-        //             addMapClickListener();
-        //         }
-        //     }, 1000);
-        // });
     </script>
 
     <!-- Load Google Maps JavaScript API with async loading -->
