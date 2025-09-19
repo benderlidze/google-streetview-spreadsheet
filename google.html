@@ -1,23 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <title>Google Maps with Street View Popup</title>
-    <meta charset='utf-8'>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-
     <style>
-        body {
-            margin: 0;
-            padding: 0;
+        * {
+            box-sizing: border-box;
         }
 
-        html,
-        body {
-            height: 100%;
+        body, html {
             margin: 0;
             padding: 0;
+            height: 100%;
         }
 
         #map {
@@ -25,7 +21,7 @@
             width: 100%;
         }
 
-        /* Filter panel styles */
+        /* Filter Panel */
         #filters {
             position: absolute;
             top: 10px;
@@ -50,12 +46,13 @@
             border-bottom: 2px solid #4285f4;
         }
 
-        .toggle-container-small {
+        /* Toggle Switches */
+        .toggle-container {
             margin: 6px 0;
             font-family: Arial, sans-serif;
         }
 
-        .toggle-label-small {
+        .toggle-label {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -66,31 +63,31 @@
             transition: background-color 0.2s ease;
         }
 
-        .toggle-label-small:hover {
+        .toggle-label:hover {
             background-color: #f8f8f8;
         }
 
-        .toggle-name-small {
+        .toggle-name {
             font-size: 13px;
             font-weight: 500;
             color: #333;
         }
 
-        .toggle-switch-small {
+        .toggle-switch {
             position: relative;
             width: 32px;
             height: 18px;
             margin-right: 8px;
         }
 
-        .toggle-input-small {
+        .toggle-input {
             opacity: 0;
             width: 0;
             height: 0;
             position: absolute;
         }
 
-        .toggle-slider-small {
+        .toggle-slider {
             position: absolute;
             cursor: pointer;
             top: 0;
@@ -102,7 +99,7 @@
             border-radius: 18px;
         }
 
-        .toggle-slider-small:before {
+        .toggle-slider::before {
             position: absolute;
             content: "";
             height: 14px;
@@ -115,25 +112,22 @@
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
-        .toggle-input-small:checked+.toggle-slider-small {
+        .toggle-input:checked + .toggle-slider {
             background-color: #4285f4;
         }
 
-        .toggle-input-small:checked+.toggle-slider-small:before {
+        .toggle-input:checked + .toggle-slider::before {
             transform: translateX(14px);
         }
 
-        .toggle-input-small:focus+.toggle-slider-small {
+        .toggle-input:focus + .toggle-slider {
             box-shadow: 0 0 1px #4285f4;
         }
 
-        /* Custom popup modal styles - smaller size */
+        /* Street View Popup */
         #streetview-popup {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             background: rgba(0, 0, 0, 0.8);
             display: none;
             z-index: 2000;
@@ -203,7 +197,7 @@
             height: 100%;
         }
 
-        /* Info section below street view */
+        /* Info Section */
         #info-section {
             background: #f8f9fa;
             padding: 10px;
@@ -237,7 +231,6 @@
 
         .button-container {
             display: flex;
-            flex-direction: row;
             gap: 10px;
             margin-top: 15px;
             padding-top: 15px;
@@ -290,7 +283,6 @@
             transform: none;
         }
 
-        /* Loading indicator */
         .loading {
             display: flex;
             justify-content: center;
@@ -300,7 +292,7 @@
             color: #666;
         }
 
-        /* Responsive design for smaller screens */
+        /* Mobile Responsive */
         @media (max-width: 768px) {
             #popup-content {
                 width: 95%;
@@ -312,7 +304,6 @@
             .action-button {
                 width: 100%;
             }
-
         }
     </style>
 </head>
@@ -323,7 +314,6 @@
         <div class="filter-title">Filter by Group</div>
     </div>
 
-    <!-- Custom Street View Popup Modal -->
     <div id="streetview-popup">
         <div id="popup-content">
             <div id="popup-header">
@@ -355,392 +345,303 @@
     </div>
 
     <script>
-        let map;
-        let popupPanorama;
-        let markers = [];
-        let clusterer = null;
-        let streetViewService;
-        let currentPopupData = null;
-
-        // Filter system
-        const filters = document.getElementById('filters');
-        const appData = {
-            allMarkers: [],
-            availableGroups: [],
-            groupStates: {},
-            csvData: []
+        const AppConfig = {
+            CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSTPqE_AH0J2pawMVjC7eJnkd7L6RhXlTSJ75EPSQyyrlH4lW3SsEGKtMDiiAzFAH3nEFZ-LfqG3lm3/pub?output=csv",
+            GROUP_COLUMN: 'group',
+            DEFAULT_CENTER: { lat: 53.350379, lng: -6.269649 },
+            CLUSTER_CONFIG: {
+                gridSize: 100,
+                maxZoom: 18
+            }
         };
 
-        // Load MarkerClusterer dynamically to avoid conflicts
-        function loadMarkerClusterer() {
-            return new Promise((resolve, reject) => {
-                if (window.markerClusterer) {
-                    resolve(window.markerClusterer);
-                    return;
-                }
-
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/@googlemaps/markerclusterer@2.5.3/dist/index.min.js';
-                script.onload = () => {
-                    resolve(window.markerClusterer);
+        const MapApp = {
+            map: null,
+            panorama: null,
+            clusterer: null,
+            streetViewService: null,
+            data: {
+                allMarkers: [],
+                availableGroups: [],
+                groupStates: {},
+                csvData: []
+            },
+            
+            getMarkerConfig() {
+                return {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 12,
+                    fillColor: '#4285f4',
+                    fillOpacity: 1,
+                    strokeWeight: 2,
+                    strokeColor: 'white'
                 };
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
+            },
 
-        async function initMap() {
-            try {
-                // Initialize the map
+            async init() {
+                try {
+                    await this.initializeMap();
+                    await this.loadMarkerClusterer();
+                    await this.loadData();
+                    this.setupEventListeners();
+                } catch (error) {
+                    console.error('Initialization error:', error);
+                }
+            },
+
+            async initializeMap() {
                 const { Map } = await google.maps.importLibrary("maps");
                 const { StreetViewPanorama, StreetViewService } = await google.maps.importLibrary("streetView");
 
-                const defaultCenter = { lat: 53.350379, lng: -6.269649 };
-
-                // Create the map
-                map = new Map(document.getElementById('map'), {
-                    center: defaultCenter,
+                this.map = new Map(document.getElementById('map'), {
+                    center: AppConfig.DEFAULT_CENTER,
                     zoom: 17,
                     streetViewControl: false,
                 });
 
-                // Initialize Street View Service
-                streetViewService = new StreetViewService();
-
-                // Create Street View panorama for popup (initially hidden)
-                popupPanorama = new StreetViewPanorama(
+                this.streetViewService = new StreetViewService();
+                this.panorama = new StreetViewPanorama(
                     document.getElementById('popup-streetview'),
                     {
-                        position: defaultCenter,
+                        position: AppConfig.DEFAULT_CENTER,
                         pov: { heading: 0, pitch: 0 },
                         zoom: 0,
                         visible: false,
                     }
                 );
+            },
 
-                // Load MarkerClusterer library
-                await loadMarkerClusterer();
-
-                // Load CSV data and add markers
-                loadMarkersFromCSV();
-
-                // Add click listener to popup background to close
-                document.getElementById('streetview-popup').addEventListener('click', function (e) {
-                    if (e.target === this) {
-                        hideStreetViewPopup();
-                    }
+            async loadMarkerClusterer() {
+                if (window.markerClusterer) return window.markerClusterer;
+                
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://unpkg.com/@googlemaps/markerclusterer@2.5.3/dist/index.min.js';
+                    script.onload = () => resolve(window.markerClusterer);
+                    script.onerror = reject;
+                    document.head.appendChild(script);
                 });
+            },
 
-                // Add escape key listener
-                document.addEventListener('keydown', function (e) {
-                    if (e.key === 'Escape') {
-                        hideStreetViewPopup();
-                    }
-                });
-
-            } catch (error) {
-                console.error('Error initializing map:', error);
-            }
-        }
-
-        function loadMarkersFromCSV() {
-            // Load CSV data using d3.csv
-            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSTPqE_AH0J2pawMVjC7eJnkd7L6RhXlTSJ75EPSQyyrlH4lW3SsEGKtMDiiAzFAH3nEFZ-LfqG3lm3/pub?output=csv")
-                .then(data => {
+            async loadData() {
+                try {
+                    const data = await d3.csv(AppConfig.CSV_URL);
                     console.log('CSV data loaded:', data);
-                    appData.csvData = data;
-
-                    // Extract unique groups from column 'group' (assuming this is the filter column)
-                    const groupColumn = 'group'; // Change this to your actual column name
-                    appData.availableGroups = [...new Set(data.map(d => d[groupColumn]).filter(g => g && g.trim() !== ''))];
-                    console.log('Available groups:', appData.availableGroups);
-
-                    // Initialize group states - all set to true by default
-                    appData.availableGroups.forEach(group => {
-                        appData.groupStates[group] = true;
-                    });
-
-                    // Create toggle switches for each unique group
-                    appData.availableGroups.forEach(group => {
-                        const toggle = createToggleDiv(group, handleToggle, true);
-                        filters.appendChild(toggle);
-                    });
-
-                    // Create all markers
-                    createAllMarkers(data);
-
-                    // Initial map update with all markers visible
-                    updateMapMarkers();
-                })
-                .catch(error => {
-                    console.error('Error loading CSV data:', error);
-                });
-        }
-
-        function createAllMarkers(data) {
-            // Clear existing markers
-            appData.allMarkers = [];
-
-            // Create markers for each data point
-            data.forEach(d => {
-                const coordinates = d['coordinates'].split(',').map(Number);
-                const [lat, lng] = coordinates;
-
-                // Create marker
-                const marker = new google.maps.Marker({
-                    position: { lat: lat, lng: lng },
-                    title: d.name || 'Location',
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 12,
-                        fillColor: '#4285f4',
-                        fillOpacity: 1,
-                        strokeWeight: 2,
-                        strokeColor: 'white'
-                    }
-                });
-
-                // Store data in marker for access in click handler
-                marker.csvData = d;
-                marker.groupValue = d['group'] || '';
-
-                // Add click listener to marker to show popup
-                marker.addListener('click', () => {
-                    console.log('Marker clicked at:', lat, lng);
-                    showStreetViewPopup(lat, lng, d);
-                });
-
-                // Create info window for hover
-                const infoWindow = new google.maps.InfoWindow({
-                    content: createInfoWindowContent(d)
-                });
-
-                // Add info window on marker hover
-                marker.addListener('mouseover', () => {
-                    infoWindow.open(map, marker);
-                });
-
-                marker.addListener('mouseout', () => {
-                    infoWindow.close();
-                });
-
-                // Store marker reference
-                appData.allMarkers.push(marker);
-            });
-
-            console.log(`Created ${appData.allMarkers.length} total markers`);
-        }
-
-        // Function to filter markers based on group states
-        function updateMapMarkers() {
-            // Filter markers based on active groups
-            const filteredMarkers = appData.allMarkers.filter(marker =>
-                appData.groupStates[marker.groupValue] === true
-            );
-
-            // Clear existing clusterer
-            if (clusterer) {
-                clusterer.clearMarkers();
-            }
-
-            // Create new clusterer with filtered markers
-            if (filteredMarkers.length > 0 && window.markerClusterer) {
-                clusterer = new markerClusterer.MarkerClusterer({
-                    map: map,
-                    markers: filteredMarkers,
-                    algorithm: new markerClusterer.GridAlgorithm({
-                        gridSize: 100,
-                        maxZoom: 18
-                    })
-                });
-
-                console.log(`Displaying ${filteredMarkers.length} filtered markers`);
-            }
-        }
-
-        // Create toggle switch element
-        function createToggleDiv(name, onToggle, initialState = false) {
-            const container = document.createElement('div');
-            container.className = 'toggle-container-small';
-
-            const label = document.createElement('label');
-            label.className = 'toggle-label-small';
-
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'toggle-name-small';
-            nameSpan.textContent = name;
-
-            const switchDiv = document.createElement('div');
-            switchDiv.className = 'toggle-switch-small';
-
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.checked = initialState;
-            input.className = 'toggle-input-small';
-
-            const slider = document.createElement('span');
-            slider.className = 'toggle-slider-small';
-
-            input.addEventListener('change', function () {
-                if (onToggle) {
-                    onToggle(this.checked, name);
+                    
+                    this.data.csvData = data;
+                    this.extractUniqueGroups(data);
+                    this.createFilterToggles();
+                    this.createMarkers(data);
+                    this.updateMarkerVisibility();
+                } catch (error) {
+                    console.error('Data loading error:', error);
                 }
-            });
+            },
 
-            switchDiv.appendChild(input);
-            switchDiv.appendChild(slider);
-            label.appendChild(switchDiv);
-            label.appendChild(nameSpan);
-            container.appendChild(label);
+            extractUniqueGroups(data) {
+                this.data.availableGroups = [...new Set(
+                    data.map(d => d[AppConfig.GROUP_COLUMN])
+                        .filter(g => g && g.trim() !== '')
+                )];
+                
+                this.data.availableGroups.forEach(group => {
+                    this.data.groupStates[group] = true;
+                });
+            },
 
-            return container;
-        }
+            createFilterToggles() {
+                const filtersEl = document.getElementById('filters');
+                this.data.availableGroups.forEach(group => {
+                    filtersEl.appendChild(this.createToggle(group, true));
+                });
+            },
 
-        // Handle toggle changes and update group states
-        const handleToggle = (state, name) => {
-            appData.groupStates[name] = state;
-            console.log(`${name} is now ${state ? 'ON' : 'OFF'}`);
-            console.log('Updated group states:', appData.groupStates);
+            createToggle(name, initialState) {
+                const container = document.createElement('div');
+                container.className = 'toggle-container';
 
-            // Update the map with new filter
-            updateMapMarkers();
-        };
+                const label = document.createElement('label');
+                label.className = 'toggle-label';
 
-        function showStreetViewPopup(lat, lng, data) {
-            currentPopupData = data;
-            const position = { lat: lat, lng: lng };
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'toggle-name';
+                nameSpan.textContent = name;
 
-            // Update popup title
-            const title = data.name || `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-            document.getElementById('popup-title').textContent = title;
+                const switchDiv = document.createElement('div');
+                switchDiv.className = 'toggle-switch';
 
-            // Update info fields
-            updateInfoFields(data);
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = initialState;
+                input.className = 'toggle-input';
+                input.addEventListener('change', () => this.handleToggle(input.checked, name));
 
-            // Show the popup
-            document.getElementById('streetview-popup').style.display = 'block';
+                const slider = document.createElement('span');
+                slider.className = 'toggle-slider';
 
-            // Add loading indicator
-            const container = document.getElementById('popup-streetview');
-            container.innerHTML = '<div class="loading">Loading Street View...</div>';
+                switchDiv.append(input, slider);
+                label.append(switchDiv, nameSpan);
+                container.appendChild(label);
 
-            // Use Street View Service to find nearest panorama
-            streetViewService.getPanorama({
-                location: position,
-                radius: 50,
-                source: google.maps.StreetViewSource.OUTDOOR
-            }).then(({ data: svData }) => {
-                // Clear loading indicator
-                container.innerHTML = '';
+                return container;
+            },
 
-                // Create new panorama for this location
-                popupPanorama = new google.maps.StreetViewPanorama(
-                    container,
-                    {
+            createMarkers(data) {
+                this.data.allMarkers = [];
+
+                data.forEach(d => {
+                    const [lat, lng] = d.coordinates.split(',').map(Number);
+                    
+                    const marker = new google.maps.Marker({
+                        position: { lat, lng },
+                        title: d.name || 'Location',
+                        icon: this.getMarkerConfig()
+                    });
+
+                    marker.csvData = d;
+                    marker.groupValue = d[AppConfig.GROUP_COLUMN] || '';
+
+                    this.setupMarkerListeners(marker, lat, lng, d);
+                    this.data.allMarkers.push(marker);
+                });
+            },
+
+            setupMarkerListeners(marker, lat, lng, data) {
+                marker.addListener('click', () => this.showStreetView(lat, lng, data));
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: this.createInfoContent(data)
+                });
+
+                marker.addListener('mouseover', () => infoWindow.open(this.map, marker));
+                marker.addListener('mouseout', () => infoWindow.close());
+            },
+
+            createInfoContent(data) {
+                let content = '<div style="max-width: 200px;">';
+                
+                if (data.Ref) content += `<strong>Ref:</strong> ${data.Ref}<br>`;
+                if (data[AppConfig.GROUP_COLUMN]) content += `<strong>Group:</strong> ${data[AppConfig.GROUP_COLUMN]}<br>`;
+                
+                content += '<em style="color: #666;">Click marker for Street View</em></div>';
+                return content;
+            },
+
+            handleToggle(state, name) {
+                this.data.groupStates[name] = state;
+                this.updateMarkerVisibility();
+            },
+
+            updateMarkerVisibility() {
+                const filteredMarkers = this.data.allMarkers.filter(marker => 
+                    this.data.groupStates[marker.groupValue] === true
+                );
+
+                if (this.clusterer) {
+                    this.clusterer.clearMarkers();
+                }
+
+                if (filteredMarkers.length > 0 && window.markerClusterer) {
+                    this.clusterer = new markerClusterer.MarkerClusterer({
+                        map: this.map,
+                        markers: filteredMarkers,
+                        algorithm: new markerClusterer.GridAlgorithm(AppConfig.CLUSTER_CONFIG)
+                    });
+                }
+            },
+
+            showStreetView(lat, lng, data) {
+                const position = { lat, lng };
+                
+                document.getElementById('popup-title').textContent = 
+                    data.name || `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+                
+                this.updateInfoFields(data);
+                document.getElementById('streetview-popup').style.display = 'block';
+                
+                const container = document.getElementById('popup-streetview');
+                container.innerHTML = '<div class="loading">Loading Street View...</div>';
+
+                this.streetViewService.getPanorama({
+                    location: position,
+                    radius: 50,
+                    source: google.maps.StreetViewSource.OUTDOOR
+                }).then(({ data: svData }) => {
+                    container.innerHTML = '';
+                    
+                    this.panorama = new google.maps.StreetViewPanorama(container, {
                         position: svData.location.latLng,
-                        pov: {
-                            heading: 0,
-                            pitch: 0
-                        },
+                        pov: { heading: 0, pitch: 0 },
                         zoom: 0,
                         visible: true,
                         addressControl: false,
                         navigationControl: true,
                         enableCloseButton: false
-                    }
-                );
-
-                popupPanorama.setPano(svData.location.pano);
-            }).catch((e) => {
-                console.error('Street View data not found for this location:', e);
-
-                // Show error message or fallback
-                container.innerHTML = `
-                    <div class="loading">
-                        <div>Street View not available for this location</div>
-                        <div style="margin-top: 10px; font-size: 12px;">
-                            Location: ${lat.toFixed(6)}, ${lng.toFixed(6)}
+                    });
+                    
+                    this.panorama.setPano(svData.location.pano);
+                }).catch(() => {
+                    container.innerHTML = `
+                        <div class="loading">
+                            <div>Street View not available for this location</div>
+                            <div style="margin-top: 10px; font-size: 12px;">
+                                Location: ${lat.toFixed(6)}, ${lng.toFixed(6)}
+                            </div>
                         </div>
-                    </div>
-                `;
-            });
-        }
+                    `;
+                });
+            },
 
-        function updateInfoFields(data) {
-            // Update Ref field
-            const refValue = data['Ref'] || '-';
-            document.getElementById('ref-value').textContent = refValue;
+            updateInfoFields(data) {
+                document.getElementById('ref-value').textContent = data.Ref || '-';
+                document.getElementById('group-value').textContent = data[AppConfig.GROUP_COLUMN] || '-';
+                document.getElementById('text-value').textContent = data.Text || '-';
 
-            // Update Group field
-            const groupValue = data['group'] || '-';
-            document.getElementById('group-value').textContent = groupValue;
+                this.updateButton('pictures-button', data['URL to behind the "pictures" button']);
+                this.updateButton('feedback-button', data['URL to display behind the "feedback" button']);
+            },
 
-            // Update Text field
-            const textValue = data['Text'] || '-';
-            document.getElementById('text-value').textContent = textValue;
+            updateButton(buttonId, url) {
+                const button = document.getElementById(buttonId);
+                const isValid = url && url.trim() !== '' && url !== '-';
+                
+                button.href = isValid ? url : '#';
+                button.classList.toggle('disabled', !isValid);
+                button.style.pointerEvents = isValid ? 'auto' : 'none';
+            },
 
-            // Update Pictures button URL
-            const picturesUrl = data['URL to behind the "pictures" button'];
-            const picturesButton = document.getElementById('pictures-button');
+            setupEventListeners() {
+                document.getElementById('streetview-popup').addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) this.hideStreetView();
+                });
 
-            if (picturesUrl && picturesUrl.trim() !== '' && picturesUrl !== '-') {
-                picturesButton.href = picturesUrl;
-                picturesButton.classList.remove('disabled');
-                picturesButton.style.pointerEvents = 'auto';
-            } else {
-                picturesButton.href = '#';
-                picturesButton.classList.add('disabled');
-                picturesButton.style.pointerEvents = 'none';
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') this.hideStreetView();
+                });
+            },
+
+            hideStreetView() {
+                document.getElementById('streetview-popup').style.display = 'none';
+                document.getElementById('popup-streetview').innerHTML = '';
             }
+        };
 
-            // Update Feedback button URL
-            const feedbackUrl = data['URL to display behind the "feedback" button'];
-            const feedbackButton = document.getElementById('feedback-button');
-
-            if (feedbackUrl && feedbackUrl.trim() !== '' && feedbackUrl !== '-') {
-                feedbackButton.href = feedbackUrl;
-                feedbackButton.classList.remove('disabled');
-                feedbackButton.style.pointerEvents = 'auto';
-            } else {
-                feedbackButton.href = '#';
-                feedbackButton.classList.add('disabled');
-                feedbackButton.style.pointerEvents = 'none';
-            }
+        // Global functions for Google Maps callback and onclick handler
+        function initMap() {
+            MapApp.init();
         }
 
         function hideStreetViewPopup() {
-            document.getElementById('streetview-popup').style.display = 'none';
-
-            // Clean up panorama
-            const container = document.getElementById('popup-streetview');
-            container.innerHTML = '';
-            currentPopupData = null;
+            MapApp.hideStreetView();
         }
 
-        function createInfoWindowContent(data) {
-            // Create info window content from CSV data
-            let content = '<div style="max-width: 200px;">';
-
-            // Show key fields in hover
-            if (data['Ref']) {
-                content += `<strong>Ref:</strong> ${data['Ref']}<br>`;
-            }
-            if (data['group']) {
-                content += `<strong>Group:</strong> ${data['group']}<br>`;
-            }
-
-            content += '<em style="color: #666;">Click marker for Street View</em>';
-            content += '</div>';
-            return content;
-        }
-
+        // Make functions globally accessible
         window.initMap = initMap;
+        window.hideStreetViewPopup = hideStreetViewPopup;
     </script>
 
-    <!-- Load Google Maps JavaScript API with async loading -->
     <script async defer
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyALU--rsdhd4lwvHyolP0x1tg4Dqcj-PI8&callback=initMap&libraries=streetView&loading=async">
-        </script>
+    </script>
 </body>
-
 </html>
