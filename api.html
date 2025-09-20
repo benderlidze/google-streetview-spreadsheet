@@ -399,6 +399,12 @@
                     center: AppConfig.DEFAULT_CENTER,
                     zoom: 17,
                     streetViewControl: false,
+                    mapTypeControl: true,
+                    mapTypeControlOptions: {
+                        style: google.maps.MapTypeControlStyle.DEFAULT,
+                        position: google.maps.ControlPosition.TOP_RIGHT
+                    },
+                    mapTypeId: 'roadmap',
                 });
 
                 this.streetViewService = new StreetViewService();
