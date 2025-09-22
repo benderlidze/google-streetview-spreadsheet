@@ -26,7 +26,7 @@
         /* Filter Panel */
         #filters {
             position: absolute;
-            top: 10px;
+            top: 60px;
             left: 10px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 8px;
@@ -156,7 +156,7 @@
         #popup-header {
             background: #4285f4;
             color: white;
-            padding: 12px 20px;
+            padding: 5px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -234,8 +234,7 @@
         .button-container {
             display: flex;
             gap: 10px;
-            margin-top: 15px;
-            padding-top: 15px;
+            padding-top: 10px;
             border-top: 1px solid #dee2e6;
         }
 
@@ -294,6 +293,12 @@
             color: #666;
         }
 
+        .info-row-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
         /* Mobile Responsive */
         @media (max-width: 768px) {
             #popup-content {
@@ -305,6 +310,11 @@
 
             .action-button {
                 width: 100%;
+            }
+
+            .info-row-group {
+                flex-direction: row;
+                gap: 15px;
             }
         }
     </style>
@@ -326,13 +336,15 @@
                 <div id="popup-streetview"></div>
             </div>
             <div id="info-section">
-                <div class="info-row">
-                    <span class="info-label">Ref:</span>
-                    <span class="info-value" id="ref-value">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Group:</span>
-                    <span class="info-value" id="group-value">-</span>
+                <div class="info-row-group">
+                    <div class="info-row">
+                        <span class="info-label">Ref:</span>
+                        <span class="info-value" id="ref-value">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Group:</span>
+                        <span class="info-value" id="group-value">-</span>
+                    </div>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Text:</span>
@@ -401,11 +413,12 @@
                     streetViewControl: false,
                     mapTypeControl: true,
                     mapTypeControlOptions: {
-                        style: google.maps.MapTypeControlStyle.DEFAULT,
-                        position: google.maps.ControlPosition.TOP_RIGHT
+                        style: google.maps.MapTypeControlStyle.DEFAULT_CENTER, // Changed from DEFAULT
+                        position: google.maps.ControlPosition.TOP_LEFT
                     },
                     mapTypeId: 'roadmap',
                 });
+
 
                 this.streetViewService = new StreetViewService();
                 this.panorama = new StreetViewPanorama(
